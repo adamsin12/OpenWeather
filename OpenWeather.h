@@ -28,7 +28,7 @@ class OW_Weather: public JsonListener {
     // Sketch calls this forecast request, it returns true if no parse errors encountered
     bool getForecast(OW_current *current, OW_hourly *hourly, OW_daily  *daily,
                      String api_key, String latitude, String longitude,
-                     String units, String language);
+                     String units, String language, bool secure);
 
     // Called by library (or user sketch), sends a GET request to a https (secure) url
     bool parseRequest(String url); // and parses response, returns true if no parse errors
@@ -99,6 +99,8 @@ class OW_Weather: public JsonListener {
     String   arrayPath;     // Path to name:value pair e.g.  "daily/data"
     uint16_t arrayIndex;    // Array index e.g. 5 for day 5 forecast, qualify with arrayPath
     uint16_t arrayLevel;    // Array level
+bool Secure;
+bool secure;
 
 };
 
