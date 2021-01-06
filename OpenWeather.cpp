@@ -5,6 +5,7 @@
 // This is a beta test version and is subject to change!
 
 // See license.txt in root folder of library
+//Insecure mode by ADAMSIN12
 
 #ifdef ESP8266
   #include <ESP8266WiFi.h>
