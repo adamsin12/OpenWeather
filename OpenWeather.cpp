@@ -5,7 +5,7 @@
 // This is a beta test version and is subject to change!
 
 // See license.txt in root folder of library
-//Insecure mode by ADAMSIN12
+//Insecure mode added by ADAMSIN12
 
 #ifdef ESP8266
   #include <ESP8266WiFi.h>
@@ -14,12 +14,14 @@
 #endif
 
 #include <WiFiClientSecure.h>
-
+#define DEBUG
+#define INSECURE
 // The streaming parser to use is not the Arduino IDE library manager default,
 // but this one which is slightly different and renamed to avoid conflicts:
 // https://github.com/Bodmer/JSON_Decoder
 
-
+bool Secure = true;
+int port;
 #include <JSON_Listener.h>
 #include <JSON_Decoder.h>
 
@@ -36,6 +38,8 @@ bool OW_Weather::getForecast(OW_current *current, OW_hourly *hourly, OW_daily *d
                              String api_key, String latitude, String longitude,
                              String units, String language, bool secure) {
 
+
+
   data_set = "";
   hourly_index = 0;
   daily_index = 0;
@@ -46,21 +50,34 @@ bool OW_Weather::getForecast(OW_current *current, OW_hourly *hourly, OW_daily *d
   this->daily    = daily;
 
   // Exclude some info by passing fn a NULL pointer to reduce memory needed
-  String exclude = "";
-  if (!current)  exclude += "current,";
-  if (!hourly)   exclude += "hourly,";
-  if (!daily)    exclude += "daily,";
+  String exclude = "alerts";
+  if (!current)  exclude += ",current";
+  if (!hourly)   exclude += ",hourly";
+  if (!daily)    exclude += ",daily";
 
   String url = "https://api.openweathermap.org/data/2.5/onecall?lat=" + latitude + "&lon=" + longitude + "&exclude=minutely," + exclude + "&units=" + units + "&lang=" + language + "&appid=" + api_key;
-bool Secure = secure;
+bool result = false;
+if(secure){
+
+  result = parseRequest(url);
+}else{
+
+  result = parseRequestInsecure(url);
+}
 
   // Send GET request and feed the parser
-  bool result = parseRequest(url);
+
+
+
+
+
 
   // Null out pointers to prevent crashes
   this->current  = nullptr;
   this->hourly   = nullptr;
   this->daily    = nullptr;
+
+
 
   return result;
 }
@@ -82,28 +99,24 @@ void OW_Weather::partialDataSet(bool partialSet) {
 ***************************************************************************************/
 bool OW_Weather::parseRequest(String url) {
 
+
   uint32_t dt = millis();
 
   const char*  host = "api.openweathermap.org";
   // Must use namespace:: to select BearSSL
-if(secure){
-    BearSSL::WiFiClientSecure client;
 
-  client.setInsecure();
-  if (!client.connect(host, 443))
+
+  port = 443;
+  WiFiClientSecure client;
+  //client.setInsecure();
+
+
+
+  if (!client.connect(host, port))
   {
     Serial.println("Connection failed.");
     return false;
   }
-}else{
-  WiFiClient client;
-  if (!client.connect(host, 80))
-  {
-    Serial.println("Connection failed.");
-    return false;
-  }
-}
-
   JSON_Decoder parser;
   parser.setListener(this);
 
@@ -113,15 +126,17 @@ if(secure){
   char c = 0;
   parseOK = false;
 
-#ifdef SHOW_JSON
+  #ifdef SHOW_JSON
   int ccount = 0;
-#endif
+  #endif
+
   // Send GET request
-  Serial.println("\nSending GET request to api.openweathermap.org...");
+  Serial.println("Sending GET request to api.openweathermap.org...");
+  Serial.println("The connection to server is secure.");
   client.print(String("GET ") + url + " HTTP/1.1\r\n" + "Host: " + host + "\r\n" + "Connection: close\r\n\r\n");
 
   // Pull out any header, X-Forecast-API-Calls: reports current daily API call count
-  while (client.connected())
+  while (client.available() || client.connected())
   {
     String line = client.readStringUntil('\n');
     if (line == "\r") {
@@ -129,9 +144,7 @@ if(secure){
       break;
     }
 
-#ifdef SHOW_HEADER
     Serial.println(line);
-#endif
 
     if ((millis() - timeout) > 5000UL)
     {
@@ -141,28 +154,26 @@ if(secure){
     }
   }
 
-  Serial.println("\nParsing JSON");
 
   // Parse the JSON data, available() includes yields
-  while ( client.available() > 0 || client.connected())
+  while (client.available() || client.connected())
   {
-    while(client.available() > 0)
+    while (client.available())
     {
       c = client.read();
       parser.parse(c);
-#ifdef SHOW_JSON
+  #ifdef SHOW_JSON
       if (c == '{' || c == '[' || c == '}' || c == ']') Serial.println();
       Serial.print(c); if (ccount++ > 100 && c == ',') {ccount = 0; Serial.println();}
-#endif
+  #endif
+    }
 
-      if ((millis() - timeout) > 8000UL)
-      {
-        Serial.println ("JSON parse client timeout");
-        parser.reset();
-        client.stop();
-        return false;
-      }
-      yield();
+    if ((millis() - timeout) > 8000UL)
+    {
+      Serial.println ("JSON client timeout");
+      parser.reset();
+      client.stop();
+      return false;
     }
   }
 
@@ -173,8 +184,10 @@ if(secure){
 
   client.stop();
   
-  // A message has been parsed but the data-point correctness is unknown
+  // A message has been parsed without error but the data-point correctness is unknown
   return parseOK;
+
+
 }
 
 #else // ESP8266 version
@@ -183,25 +196,29 @@ if(secure){
 ** Function name:           parseRequest (for ESP8266)
 ** Description:             Fetches the JSON message and feeds to the parser
 ***************************************************************************************/
+
 bool OW_Weather::parseRequest(String url) {
+
 
   uint32_t dt = millis();
 
   const char*  host = "api.openweathermap.org";
   // Must use namespace:: to select BearSSL
-if(Secure){
-    BearSSL::WiFiClientSecure client;
 
+
+  port = 443;
+  BearSSL::WiFiClientSecure client;
   client.setInsecure();
-  if (!client.connect(host, 443))
+
+
+
+  if (!client.connect(host, port))
   {
     Serial.println("Connection failed.");
     return false;
-
- JSON_Decoder parser;
+  }
+  JSON_Decoder parser;
   parser.setListener(this);
-
-
 
 
 
@@ -209,98 +226,13 @@ if(Secure){
   char c = 0;
   parseOK = false;
 
-#ifdef SHOW_JSON
-  int ccount = 0;
-#endif
-
-  // Send GET request
-  Serial.println("Sending GET request to api.openweathermap.org...");
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" + "Host: " + host + "\r\n" + "Connection: close\r\n\r\n");
-
-  // Pull out any header, X-Forecast-API-Calls: reports current daily API call count
-  while (client.available() || client.connected())
-  {
-    String line = client.readStringUntil('\n');
-    if (line == "\r") {
-      Serial.println("Header end found");
-      break;
-    }
-
-    Serial.println(line);
-
-    if ((millis() - timeout) > 5000UL)
-    {
-      Serial.println ("HTTP header timeout");
-      client.stop();
-      return false;
-    }
-  }
-
-  Serial.println("Parsing JSON");
-  
-  // Parse the JSON data, available() includes yields
-  while (client.available() || client.connected())
-  {
-    while (client.available())
-    {
-      c = client.read();
-      parser.parse(c);
   #ifdef SHOW_JSON
-      if (c == '{' || c == '[' || c == '}' || c == ']') Serial.println();
-      Serial.print(c); if (ccount++ > 100 && c == ',') {ccount = 0; Serial.println();}
-  #endif
-    }
-
-    if ((millis() - timeout) > 8000UL)
-    {
-      Serial.println ("JSON client timeout");
-      parser.reset();
-      client.stop();
-      return false;
-    }
-  }
-
-  Serial.println("");
-  Serial.print("Done in "); Serial.print(millis()-dt); Serial.println(" ms\n");
-
-  parser.reset();
-
-  client.stop();
-  
-  // A message has been parsed without error but the data-point correctness is unknown
-  return parseOK;
-}
-
-
-}
-
-
-  
-if(!Secure){
-  WiFiClient client;
-  if (!client.connect(host, 80))
-  {
-    Serial.println("Connection failed.");
-    return false;
-  }
-
- JSON_Decoder parser;
-  parser.setListener(this);
-
-
-
-
-
-  uint32_t timeout = millis();
-  char c = 0;
-  parseOK = false;
-
-#ifdef SHOW_JSON
   int ccount = 0;
-#endif
+  #endif
 
   // Send GET request
   Serial.println("Sending GET request to api.openweathermap.org...");
+  Serial.println("The connection to server is secure.");
   client.print(String("GET ") + url + " HTTP/1.1\r\n" + "Host: " + host + "\r\n" + "Connection: close\r\n\r\n");
 
   // Pull out any header, X-Forecast-API-Calls: reports current daily API call count
@@ -322,8 +254,7 @@ if(!Secure){
     }
   }
 
-  Serial.println("Parsing JSON");
-  
+
   // Parse the JSON data, available() includes yields
   while (client.available() || client.connected())
   {
@@ -356,12 +287,107 @@ if(!Secure){
   // A message has been parsed without error but the data-point correctness is unknown
   return parseOK;
 
+
 }
 
 
-}
+
+
 
  #endif // ESP32 or ESP8266 parseRequest
+
+/***************************************************************************************
+** Function name:           parseRequestInsecure (Both platforms, Insecure parse request)
+** Description:             Fetches the JSON message and feeds to the parser
+***************************************************************************************/
+
+bool OW_Weather::parseRequestInsecure(String url){
+
+  port = 80;
+
+  WiFiClient client;
+
+  uint32_t dt = millis();
+
+  const char*  host = "api.openweathermap.org";
+
+
+  if (!client.connect(host, port))
+  {
+    Serial.println("Connection failed.");
+    return false;
+  }
+  JSON_Decoder parser;
+  parser.setListener(this);
+
+
+  uint32_t timeout = millis();
+  char c = 0;
+  parseOK = false;
+
+  #ifdef SHOW_JSON
+  int ccount = 0;
+  #endif
+
+  // Send GET request
+  Serial.println("Sending GET request to api.openweathermap.org...");
+Serial.println("The connection to server is INSECURE (ADVANCED MODE).");
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" + "Host: " + host + "\r\n" + "Connection: close\r\n\r\n");
+
+  // Pull out any header, X-Forecast-API-Calls: reports current daily API call count
+  while (client.available() || client.connected())
+  {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") {
+      Serial.println("Header end found");
+      break;
+    }
+
+    Serial.println(line);
+
+    if ((millis() - timeout) > 5000UL)
+    {
+      Serial.println ("HTTP header timeout");
+      client.stop();
+      return false;
+    }
+  }
+
+
+  // Parse the JSON data, available() includes yields
+  while (client.available() || client.connected())
+  {
+    while (client.available())
+    {
+      c = client.read();
+      parser.parse(c);
+  #ifdef SHOW_JSON
+      if (c == '{' || c == '[' || c == '}' || c == ']') Serial.println();
+      Serial.print(c); if (ccount++ > 100 && c == ',') {ccount = 0; Serial.println();}
+  #endif
+    }
+
+    if ((millis() - timeout) > 8000UL)
+    {
+      Serial.println ("JSON client timeout");
+      parser.reset();
+      client.stop();
+      return false;
+    }
+  }
+
+  Serial.println("");
+  Serial.print("Done in "); Serial.print(millis()-dt); Serial.println(" ms\n");
+
+  parser.reset();
+
+  client.stop();
+  
+  // A message has been parsed without error but the data-point correctness is unknown
+  return parseOK;
+
+
+}
 
 /***************************************************************************************
 ** Function name:           key etc
