@@ -87,6 +87,10 @@ void printCurrentWeather()
 
   Serial.print("\nRequesting weather information from OpenWeather... ");
 
+
+  //If you have problems with stability, use Insecure mode by adding a false parameter behind language or simply delete the slashes on the line below and delete the current getForecast
+  //ow.getForecast(current, hourly, daily, api_key, latitude, longitude, units, language, false);
+  
   ow.getForecast(current, hourly, daily, api_key, latitude, longitude, units, language);
 
   Serial.println("Weather from Open Weather\n");
