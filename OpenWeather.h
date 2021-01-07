@@ -5,6 +5,7 @@
 
 // Created by Bodmer 9/4/2020
 // This is a beta test version and is subject to change!
+//Insecure mode added by ADAMSIN12
 
 // See license.txt in root folder of library
 
@@ -28,10 +29,12 @@ class OW_Weather: public JsonListener {
     // Sketch calls this forecast request, it returns true if no parse errors encountered
     bool getForecast(OW_current *current, OW_hourly *hourly, OW_daily  *daily,
                      String api_key, String latitude, String longitude,
-                     String units, String language, bool secure);
+                     String units, String language, bool secure = true);
 
     // Called by library (or user sketch), sends a GET request to a https (secure) url
     bool parseRequest(String url); // and parses response, returns true if no parse errors
+
+    bool parseRequestInsecure(String url); 
 
     void partialDataSet(bool partialSet);
 
